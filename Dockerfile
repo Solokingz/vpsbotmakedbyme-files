@@ -1,14 +1,14 @@
 FROM ubuntu:22.04
 
 RUN apt-get update && \
+    apt-get install -y curl && \
     apt-get install -y tmate openssh-server openssh-client && \
     sed -i 's/^#\?\s*PermitRootLogin\s\+.*/PermitRootLogin yes/' /etc/ssh/sshd_config && \
     echo 'root:root' | chpasswd && \
     printf '#!/bin/sh\nexit 0' > /usr/sbin/policy-rc.d && \
     apt-get install -y systemd systemd-sysv dbus dbus-user-session && \
-    printf "systemctl start systemd-logind" >> /etc/profile
-    apt-get install -y curl && \
-    apt-get install -y ufw -y && ufw allow 80 && ufw allow 443 && apt-get install -y net-tools -y && \
+    printf "systemctl start systemd-logind" >> /etc/profile && \
+    apt-get install -y ufw && ufw allow 80 && ufw allow 443 && apt-get install -y net-tools && \
     apt-get update && apt-get install -y \
     iproute2 \
     hostname \
