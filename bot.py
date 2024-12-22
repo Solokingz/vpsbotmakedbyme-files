@@ -581,7 +581,7 @@ async def execute_command(command):
     stdout, stderr = await process.communicate()
     return stdout.decode(), stderr.decode()
 
-PUBLIC_IP = '34.145.13.158'
+PUBLIC_IP = '34.82.94.184'
 
 async def capture_output(process, keyword):
     while True:
