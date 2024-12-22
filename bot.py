@@ -24,10 +24,13 @@ intents.message_content = False
 bot = commands.Bot(command_prefix='/', intents=intents)
 client = docker.from_env()
 
-# Utility Functions
-def add_to_database(userid, container_name, ssh_command):
+# port gen forward module < i forgot this shit in the start
+def generate_random_port(): 
+    return random.randint(1025, 65535)
+
+def add_to_database(user, container_name, ssh_command):
     with open(database_file, 'a') as f:
-        f.write(f"{userid}|{container_name}|{ssh_command}\n")
+        f.write(f"{user}|{container_name}|{ssh_command}\n")
 
 def remove_from_database(ssh_command):
     if not os.path.exists(database_file):
@@ -39,6 +42,25 @@ def remove_from_database(ssh_command):
             if ssh_command not in line:
                 f.write(line)
 
+async def capture_ssh_session_line(process):
+    while True:
+        output = await process.stdout.readline()
+        if not output:
+            break
+        output = output.decode('utf-8').strip()
+        if "ssh session:" in output:
+            return output.split("ssh session:")[1].strip()
+    return None
+
+def get_ssh_command_from_database(container_id):
+    if not os.path.exists(database_file):
+        return None
+    with open(database_file, 'r') as f:
+        for line in f:
+            if container_id in line:
+                return line.split('|')[2]
+    return None
+
 def get_user_servers(user):
     if not os.path.exists(database_file):
         return []
@@ -49,29 +71,13 @@ def get_user_servers(user):
                 servers.append(line.strip())
     return servers
 
-def count_user_servers(userid):
-    return len(get_user_servers(userid))
+def count_user_servers(user):
+    return len(get_user_servers(user))
 
-def get_container_id_from_database(userid, container_name):
-    if not os.path.exists(database_file):
-        return None
-    with open(database_file, 'r') as f:
-        for line in f:
-            if line.startswith(userid) and container_name in line:
-                return line.split('|')[1]
-    return None
-
-def generate_random_port():
-    return random.randint(1025, 65535)
-
-async def capture_ssh_session_line(process):
-    while True:
-        output = await process.stdout.readline()
-        if not output:
-            break
-        output = output.decode('utf-8').strip()
-        if "ssh session:" in output:
-            return output.split("ssh session:")[1].strip()
+def get_container_id_from_database(user):
+    servers = get_user_servers(user)
+    if servers:
+        return servers[0].split('|')[1]
     return None
 
 # In-memory database for user credits
@@ -115,6 +121,7 @@ async def bal(interaction: discord.Interaction):
     user_id = interaction.user.id
     credits = user_credits.get(user_id, 0)
     await interaction.response.send_message(f"You have {credits} credits.")
+
 
 # Node Status Command
 def get_node_status():
@@ -196,6 +203,7 @@ async def renew(interaction: discord.Interaction, vps_id: str):
         description=f"VPS {vps_id} has been renewed for 8 days. New expiry date: {renewal_date.strftime('%Y-%m-%d')}. "
                     f"You now have {user_credits[user_id]} credits remaining.",
         color=0x00ff00))
+
 
 # Remove Everything Task
 async def remove_everything_task(interaction: discord.Interaction):
@@ -307,159 +315,6 @@ def count_user_servers(userid):
 
 def get_container_id_from_database(userid):
     servers = get_user_servers(userid)
-    if servers:
-        return servers[0].split('|')[1]
-    return None
-
-@bot.event
-async def on_ready():
-    #change_status.start()
-    print(f'Bot is ready. Logged in as {bot.user}')
-    await bot.tree.sync()
-
-async def regen_ssh_command(interaction: discord.Interaction, container_name: str):
-#    await interaction.response.defer()
-    user = str(interaction.user)
-    container_id = get_container_id_from_database(user, container_name)
-
-    if not container_id:
-        await interaction.response.send_message(embed=discord.Embed(description="### No active instance found for your user.", color=0xff0000))
-        return
-
-    try:
-        exec_cmd = await asyncio.create_subprocess_exec("docker", "exec", container_id, "tmate", "-F",
-                                                        stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
-    except subprocess.CalledProcessError as e:
-        await interaction.response.send_message(embed=discord.Embed(description=f"Error executing tmate in Docker container: {e}", color=0xff0000))
-        return
-
-    ssh_session_line = await capture_ssh_session_line(exec_cmd)
-    if ssh_session_line:
-        await interaction.user.send(embed=discord.Embed(description=f"### New SSH Session Command: ```{ssh_session_line}```", color=0x00ff00))
-        await interaction.response.send_message(embed=discord.Embed(description="### New SSH session generated. Check your DMs for details.", color=0x00ff00))
-    else:
-        await interaction.response.send_message(embed=discord.Embed(description="### Failed to generate new SSH session.", color=0xff0000))
-
-async def start_server(interaction: discord.Interaction, container_name: str):
-#    await interaction.response.defer()
-    userid = str(interaction.user.id)
-    container_id = get_container_id_from_database(user, container_name)
-
-    if not container_id:
-        await interaction.response.send_message(embed=discord.Embed(description="### No instance found for your user.", color=0xff0000))
-        return
-
-    try:
-        subprocess.run(["docker", "start", container_id], check=True)
-        exec_cmd = await asyncio.create_subprocess_exec("docker", "exec", container_id, "tmate", "-F",
-                                                        stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
-        ssh_session_line = await capture_ssh_session_line(exec_cmd)
-        if ssh_session_line:
-            await interaction.user.send(embed=discord.Embed(description=f"### Instance Started\nSSH Session Command: ```{ssh_session_line}```", color=0x00ff00))
-            await interaction.response.send_message(embed=discord.Embed(description="### Instance started successfully. Check your DMs for details.", color=0x00ff00))
-        else:
-            await interaction.response.send_message(embed=discord.Embed(description="### Instance started, but failed to get SSH session line.", color=0xff0000))
-    except subprocess.CalledProcessError as e:
-        await interaction.response.send_message(embed=discord.Embed(description=f"Error starting instance: {e}", color=0xff0000))
-
-async def stop_server(interaction: discord.Interaction, container_name: str):
-#    await interaction.response.defer()
-    userid = str(interaction.user.id)
-    container_id = get_container_id_from_database(user, container_name)
-
-    if not container_id:
-        await interaction.response.send_message(embed=discord.Embed(description="### No instance found for your user.", color=0xff0000))
-        return
-
-    try:
-        subprocess.run(["docker", "stop", container_id], check=True)
-        await interaction.response.send_message(embed=discord.Embed(description="### Instance stopped successfully.", color=0x00ff00))
-    except subprocess.CalledProcessError as e:
-        await interaction.response.send_message(embed=discord.Embed(description=f"### Error stopping instance: {e}", color=0xff0000))
-
-async def restart_server(interaction: discord.Interaction, container_name: str):
-#    await interaction.response.defer()
-    userid = str(interaction.user.id)
-    container_id = get_container_id_from_database(userid, container_name)
-
-    if not container_id:
-        await interaction.response.send_message(embed=discord.Embed(description="### No instance found for your user.", color=0xff0000))
-        return
-
-    try:
-        subprocess.run(["docker", "restart", container_id], check=True)
-        exec_cmd = await asyncio.create_subprocess_exec("docker", "exec", container_id, "tmate", "-F",
-                                                        stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
-        ssh_session_line = await capture_ssh_session_line(exec_cmd)
-        if ssh_session_line:
-            await interaction.user.send(embed=discord.Embed(description=f"### Instance Restarted\nSSH Session Command: ```{ssh_session_line}```\nOS: Ubuntu 22.04", color=0x00ff00))
-            await interaction.response.send_message(embed=discord.Embed(description="### Instance restarted successfully. Check your DMs for details.", color=0x00ff00))
-        else:
-            await interaction.response.send_message(embed=discord.Embed(description="### Instance restarted, but failed to get SSH session line.", color=0xff0000))
-    except subprocess.CalledProcessError as e:
-        await interaction.response.send_message(embed=discord.Embed(description=f"Error restarting instance: {e}", color=0xff0000))
-
-def get_container_id_from_database(userid, container_name):
-    if not os.path.exists(database_file):
-        return None
-    with open(database_file, 'r') as f:
-        for line in f:
-            if line.startswith(userid) and container_name in line:
-                return line.split('|')[1]
-    return None
-
-# port gen forward module < i forgot this shit in the start
-def generate_random_port(): 
-    return random.randint(1025, 65535)
-
-def add_to_database(user, container_name, ssh_command):
-    with open(database_file, 'a') as f:
-        f.write(f"{user}|{container_name}|{ssh_command}\n")
-
-def remove_from_database(ssh_command):
-    if not os.path.exists(database_file):
-        return
-    with open(database_file, 'r') as f:
-        lines = f.readlines()
-    with open(database_file, 'w') as f:
-        for line in lines:
-            if ssh_command not in line:
-                f.write(line)
-
-async def capture_ssh_session_line(process):
-    while True:
-        output = await process.stdout.readline()
-        if not output:
-            break
-        output = output.decode('utf-8').strip()
-        if "ssh session:" in output:
-            return output.split("ssh session:")[1].strip()
-    return None
-
-def get_ssh_command_from_database(container_id):
-    if not os.path.exists(database_file):
-        return None
-    with open(database_file, 'r') as f:
-        for line in f:
-            if container_id in line:
-                return line.split('|')[2]
-    return None
-
-def get_user_servers(user):
-    if not os.path.exists(database_file):
-        return []
-    servers = []
-    with open(database_file, 'r') as f:
-        for line in f:
-            if line.startswith(user):
-                servers.append(line.strip())
-    return servers
-
-def count_user_servers(user):
-    return len(get_user_servers(user))
-
-def get_container_id_from_database(user):
-    servers = get_user_servers(user)
     if servers:
         return servers[0].split('|')[1]
     return None
