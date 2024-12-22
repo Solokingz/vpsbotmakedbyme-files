@@ -24,13 +24,12 @@ intents.message_content = False
 bot = commands.Bot(command_prefix='/', intents=intents)
 client = docker.from_env()
 
-# port gen forward module < i forgot this shit in the start
-def generate_random_port(): 
-    return random.randint(1025, 65535)
+whitelist_ids = {"925248312024641577"}  # Replace with actual user IDs
 
-def add_to_database(user, container_name, ssh_command):
+# Utility Functions
+def add_to_database(userid, container_name, ssh_command):
     with open(database_file, 'a') as f:
-        f.write(f"{user}|{container_name}|{ssh_command}\n")
+        f.write(f"{userid}|{container_name}|{ssh_command}\n")
 
 def remove_from_database(ssh_command):
     if not os.path.exists(database_file):
@@ -42,25 +41,6 @@ def remove_from_database(ssh_command):
             if ssh_command not in line:
                 f.write(line)
 
-async def capture_ssh_session_line(process):
-    while True:
-        output = await process.stdout.readline()
-        if not output:
-            break
-        output = output.decode('utf-8').strip()
-        if "ssh session:" in output:
-            return output.split("ssh session:")[1].strip()
-    return None
-
-def get_ssh_command_from_database(container_id):
-    if not os.path.exists(database_file):
-        return None
-    with open(database_file, 'r') as f:
-        for line in f:
-            if container_id in line:
-                return line.split('|')[2]
-    return None
-
 def get_user_servers(user):
     if not os.path.exists(database_file):
         return []
@@ -71,20 +51,36 @@ def get_user_servers(user):
                 servers.append(line.strip())
     return servers
 
-def count_user_servers(user):
-    return len(get_user_servers(user))
+def count_user_servers(userid):
+    return len(get_user_servers(userid))
 
-def get_container_id_from_database(user):
-    servers = get_user_servers(user)
-    if servers:
-        return servers[0].split('|')[1]
+def get_container_id_from_database(userid, container_name):
+    if not os.path.exists(database_file):
+        return None
+    with open(database_file, 'r') as f:
+        for line in f:
+            if line.startswith(userid) and container_name in line:
+                return line.split('|')[1]
+    return None
+
+def generate_random_port():
+    return random.randint(1025, 65535)
+
+async def capture_ssh_session_line(process):
+    while True:
+        output = await process.stdout.readline()
+        if not output:
+            break
+        output = output.decode('utf-8').strip()
+        if "ssh session:" in output:
+            return output.split("ssh session:")[1].strip()
     return None
 
 # In-memory database for user credits
 user_credits = {}
 
 # Cuty.io API key (Your account key)
-API_KEY = 'ebe681f9e37ef61fcfd756396'
+API_KEY = '32804beeb903fb2bd833aa19f'
 
 # Slash command: earnCredit
 @bot.tree.command(name="earncredit", description="Generate a URL to shorten and earn credits.")
@@ -93,7 +89,7 @@ async def earncredit(interaction: discord.Interaction):
     user_id = interaction.user.id
 
     # Define a default URL to shorten
-    default_url = "https://cuty.io/e58WUzLMmE3S"  # Change this as needed
+    default_url = "https://cuty.io/vpscredit"  # Change this as needed
 
     # Make a request to Cuty.io API to shorten the default URL
     api_url = f"https://cutt.ly/api/api.php?key={API_KEY}&short={default_url}"
@@ -121,7 +117,6 @@ async def bal(interaction: discord.Interaction):
     user_id = interaction.user.id
     credits = user_credits.get(user_id, 0)
     await interaction.response.send_message(f"You have {credits} credits.")
-
 
 # Node Status Command
 def get_node_status():
@@ -204,7 +199,6 @@ async def renew(interaction: discord.Interaction, vps_id: str):
                     f"You now have {user_credits[user_id]} credits remaining.",
         color=0x00ff00))
 
-
 # Remove Everything Task
 async def remove_everything_task(interaction: discord.Interaction):
     await interaction.channel.send("### Node is full. Resetting all user instances...")
@@ -251,7 +245,7 @@ async def capture_ssh_session_line(process):
             return output.split("ssh session:")[1].strip()
     return None
 
-whitelist_ids = {"1128161197766746213"}  # Replace with actual user IDs
+whitelist_ids = {"925248312024641577"}  # Replace with actual user IDs
 
 @bot.tree.command(name="remove-everything", description="Removes all data and containers")
 async def remove_everything(interaction: discord.Interaction):
@@ -649,7 +643,7 @@ async def help_command(interaction: discord.Interaction):
     embed.add_field(name="/node", value="Check The Node Storage Usage.", inline=False)
     embed.add_field(name="/bal", value="Check Your Balance.", inline=False)
     embed.add_field(name="/renew", value="Renew The VPS.", inline=False)
-    embed.add_field(name="/earncredit", value="earn the credit.", inline=False)    
+    embed.add_field(name="/earncredit", value="earn the credit.", inline=False)
     await interaction.response.send_message(embed=embed)
 
 bot.run(TOKEN)
