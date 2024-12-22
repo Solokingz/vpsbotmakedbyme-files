@@ -7,8 +7,8 @@ RUN apt-get update && \
     printf '#!/bin/sh\nexit 0' > /usr/sbin/policy-rc.d && \
     apt-get install -y systemd systemd-sysv dbus dbus-user-session && \
     printf "systemctl start systemd-logind" >> /etc/profile
-    apt-get install curl -y && \
-    apt-get install ufw -y && ufw allow 80 && ufw allow 443 && apt install net-tools -y && \
+    apt-get install -y curl && \
+    apt-get install -y ufw -y && ufw allow 80 && ufw allow 443 && apt-get install -y net-tools -y && \
     apt-get update && apt-get install -y \
     iproute2 \
     hostname \
