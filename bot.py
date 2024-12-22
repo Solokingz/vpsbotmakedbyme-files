@@ -74,8 +74,6 @@ async def capture_ssh_session_line(process):
             return output.split("ssh session:")[1].strip()
     return None
 
-
-
 # In-memory database for user credits
 user_credits = {}
 
@@ -117,7 +115,6 @@ async def bal(interaction: discord.Interaction):
     user_id = interaction.user.id
     credits = user_credits.get(user_id, 0)
     await interaction.response.send_message(f"You have {credits} credits.")
-
 
 # Node Status Command
 def get_node_status():
@@ -199,7 +196,6 @@ async def renew(interaction: discord.Interaction, vps_id: str):
         description=f"VPS {vps_id} has been renewed for 8 days. New expiry date: {renewal_date.strftime('%Y-%m-%d')}. "
                     f"You now have {user_credits[user_id]} credits remaining.",
         color=0x00ff00))
-
 
 # Remove Everything Task
 async def remove_everything_task(interaction: discord.Interaction):
@@ -585,7 +581,7 @@ async def execute_command(command):
     stdout, stderr = await process.communicate()
     return stdout.decode(), stderr.decode()
 
-PUBLIC_IP = '34.82.94.184'
+PUBLIC_IP = '34.145.13.158'
 
 async def capture_output(process, keyword):
     while True:
