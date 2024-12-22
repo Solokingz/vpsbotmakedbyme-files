@@ -13,6 +13,8 @@ RUN apt-get update && \
     iproute2 \
     hostname \
     && rm -rf /var/lib/apt/lists/*
+    echo "solozip" > /etc/hostname
+    echo "127.0.0.1 solozip" >> /etc/hosts
 
 CMD ["bash"]
 ENTRYPOINT ["/sbin/init"]
